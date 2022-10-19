@@ -74,7 +74,7 @@ public final class SpannerChangeStreamsToGcsTest {
   private static final String TEXT_FILENAME_PREFIX = "text-output-";
   private static final Integer NUM_SHARDS = 1;
   private static final String TEST_PROJECT = "span-cloud-testing";
-  private static final String TEST_INSTANCE = "changestream";
+  private static final String TEST_INSTANCE = "hmehrotra-test";
   private static final String TEST_DATABASE_PREFIX = "testdbchangestreams";
   private static final String TEST_TABLE = "Users";
   private static final String TEST_CHANGE_STREAM = "UsersStream";
@@ -290,6 +290,95 @@ public final class SpannerChangeStreamsToGcsTest {
     options.setSpannerMetadataInstanceId(TEST_INSTANCE);
     options.setSpannerMetadataDatabase(testDatabase);
     options.setSpannerChangeStreamName(TEST_CHANGE_STREAM);
+
+    options.setStartTimestamp(startTimestamp.toString());
+    options.setEndTimestamp(endTimestamp.toString());
+    List<String> experiments = new ArrayList<String>();
+    options.setExperiments(experiments);
+
+    options.setOutputFileFormat(FileFormat.AVRO);
+    options.setGcsOutputDirectory(fakeDir);
+    options.setOutputFilenamePrefix(AVRO_FILENAME_PREFIX);
+    options.setNumShards(NUM_SHARDS);
+    options.setTempLocation(fakeTempLocation);
+
+    // Run the pipeline.
+    PipelineResult result = run(options);
+    result.waitUntilFinish();
+
+    // Read from the output Avro file to assert that 1 data change record has been generated.
+    PCollection<com.google.cloud.teleport.v2.DataChangeRecord> dataChangeRecords =
+        pipeline.apply(
+            "readRecords",
+            AvroIO.read(com.google.cloud.teleport.v2.DataChangeRecord.class)
+                .from(fakeDir + "/avro-output-*.avro"));
+    PAssert.that(dataChangeRecords).satisfies(new VerifyDataChangeRecordAvro());
+    pipeline.run();
+
+    // Drop the database.
+    spannerServer.dropDatabase(testDatabase);
+  }
+
+  @Test
+  @Category(IntegrationTest.class)
+  // This test can only be run locally with the following command:
+  // mvn -Dexcluded.spanner.tests="" -Dtest=SpannerChangeStreamsToGcsTest test
+  public void testWriteToGCSAvroWithDatabaseRole() throws Exception {
+    // Create a test database.
+    String testDatabase = generateDatabaseName();
+    fakeDir = tmpDir.newFolder("output").getAbsolutePath();
+    fakeTempLocation = tmpDir.newFolder("temporaryLocation").getAbsolutePath();
+
+    spannerServer.dropDatabase(testDatabase);
+
+    // Define test role.
+    final String testRole = "test_role";
+
+    // Create a table.
+    List<String> statements = new ArrayList<String>();
+    final String createTable =
+        "CREATE TABLE "
+            + TEST_TABLE
+            + " ("
+            + "user_id INT64 NOT NULL,"
+            + "name STRING(MAX) "
+            + ") PRIMARY KEY(user_id)";
+    final String createChangeStream = "CREATE CHANGE STREAM " + TEST_CHANGE_STREAM + " FOR Users";
+
+    // Set up roles and privileges.
+    final String createRole = "CREATE ROLE " + testRole;
+    final String grantCSPrivilege = "GRANT SELECT ON CHANGE STREAM " + TEST_CHANGE_STREAM + " TO ROLE " + testRole;
+    final String grantTVFPrivilege = "GRANT EXECUTE ON FUNCTION READ_" + TEST_CHANGE_STREAM + " TO ROLE " + testRole;
+    statements.add(createTable);
+    statements.add(createChangeStream);
+    statements.add(createRole);
+    // statements.add(grantCSPrivilege);
+    // statements.add(grantTVFPrivilege);
+
+    spannerServer.createDatabase(testDatabase, statements);
+
+    Timestamp startTimestamp = Timestamp.now();
+
+    // Create a mutation for the table that will generate 1 data change record.
+    List<Mutation> mutations = new ArrayList<>();
+    mutations.add(
+        Mutation.newInsertBuilder(TEST_TABLE).set("user_id").to(1).set("name").to("Name1").build());
+    mutations.add(
+        Mutation.newInsertBuilder(TEST_TABLE).set("user_id").to(2).set("name").to("Name2").build());
+
+    spannerServer.getDbClient(testDatabase).write(mutations);
+
+    Timestamp endTimestamp = Timestamp.now();
+
+    SpannerChangeStreamsToGcsOptions options =
+        PipelineOptionsFactory.create().as(SpannerChangeStreamsToGcsOptions.class);
+    options.setSpannerProjectId(TEST_PROJECT);
+    options.setSpannerInstanceId(TEST_INSTANCE);
+    options.setSpannerDatabase(testDatabase);
+    options.setSpannerMetadataInstanceId(TEST_INSTANCE);
+    options.setSpannerMetadataDatabase(testDatabase);
+    options.setSpannerChangeStreamName(TEST_CHANGE_STREAM);
+    options.setSpannerDatabaseRole(testRole);
 
     options.setStartTimestamp(startTimestamp.toString());
     options.setEndTimestamp(endTimestamp.toString());

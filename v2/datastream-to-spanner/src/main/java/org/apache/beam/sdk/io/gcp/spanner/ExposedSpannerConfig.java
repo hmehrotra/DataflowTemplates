@@ -60,6 +60,8 @@ public class ExposedSpannerConfig extends SpannerConfig {
 
   private final ValueProvider<RpcPriority> rpcPriority;
 
+  private final String databaseRole;
+
   private final ServiceFactory<Spanner, SpannerOptions> serviceFactory;
 
   private ExposedSpannerConfig(
@@ -75,6 +77,7 @@ public class ExposedSpannerConfig extends SpannerConfig {
       @Nullable RetrySettings commitRetrySettings,
       @Nullable ImmutableSet<Code> retryableCodes,
       @Nullable ValueProvider<RpcPriority> rpcPriority,
+      @Nullable String databaseRole,
       @Nullable ServiceFactory<Spanner, SpannerOptions> serviceFactory) {
     this.projectId = projectId;
     this.instanceId = instanceId;
@@ -88,6 +91,7 @@ public class ExposedSpannerConfig extends SpannerConfig {
     this.commitRetrySettings = commitRetrySettings;
     this.retryableCodes = retryableCodes;
     this.rpcPriority = rpcPriority;
+    this.databaseRole = databaseRole;
     this.serviceFactory = serviceFactory;
   }
 
@@ -161,6 +165,12 @@ public class ExposedSpannerConfig extends SpannerConfig {
   @Override
   public ValueProvider<RpcPriority> getRpcPriority() {
     return rpcPriority;
+  }
+
+  @Nullable
+  @Override
+  public String getDatabaseRole() {
+    return databaseRole;
   }
 
   @Nullable
@@ -285,6 +295,7 @@ public class ExposedSpannerConfig extends SpannerConfig {
     private RetrySettings commitRetrySettings;
     private ImmutableSet<Code> retryableCodes;
     private ValueProvider<RpcPriority> rpcPriority;
+    private String databaseRole;
     private ServiceFactory<Spanner, SpannerOptions> serviceFactory;
 
     Builder() {}
@@ -302,6 +313,7 @@ public class ExposedSpannerConfig extends SpannerConfig {
       this.commitRetrySettings = source.getCommitRetrySettings();
       this.retryableCodes = source.getRetryableCodes();
       this.rpcPriority = source.getRpcPriority();
+      this.databaseRole = source.getDatabaseRole();
       this.serviceFactory = source.getServiceFactory();
     }
 
@@ -380,6 +392,12 @@ public class ExposedSpannerConfig extends SpannerConfig {
     }
 
     @Override
+    SpannerConfig.Builder setDatabaseRole(String databaseRole) {
+      this.databaseRole = databaseRole;
+      return this;
+    }
+
+    @Override
     ExposedSpannerConfig.Builder setServiceFactory(
         ServiceFactory<Spanner, SpannerOptions> serviceFactory) {
       this.serviceFactory = serviceFactory;
@@ -401,6 +419,7 @@ public class ExposedSpannerConfig extends SpannerConfig {
           this.commitRetrySettings,
           this.retryableCodes,
           this.rpcPriority,
+          this.databaseRole,
           this.serviceFactory);
     }
   }
